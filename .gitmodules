@@ -1,5 +1,5 @@
 [submodule "submodule/crc32c"]
-	path = submodule/crc32c
+	path = include/crc32c
 	url = https://github.com/google/crc32c
 [submodule "submodule/xxhash"]
 	path = submodule/xxhash
