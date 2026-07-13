@@ -5,7 +5,7 @@
 	path = submodule/xxhash
 	url = https://github.com/Cyan4973/xxHash
 [submodule "submodule/openssl"]
-	path = submodule/openssl
+	path = include/openssl
 	url = https://github.com/openssl/openssl
 [submodule "submodule/blake2"]
 	path = include/blake2
