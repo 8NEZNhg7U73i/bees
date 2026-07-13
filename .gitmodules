@@ -1,12 +1,12 @@
-[submodule "submodule\\crc32c"]
-	path = submodule\\crc32c
+[submodule "submodule/crc32c"]
+	path = submodule/crc32c
 	url = https://github.com/google/crc32c
-[submodule "submodule\\xxhash"]
-	path = submodule\\xxhash
+[submodule "submodule/xxhash"]
+	path = submodule/xxhash
 	url = https://github.com/Cyan4973/xxHash
-[submodule "submodule\\openssl"]
-	path = submodule\\openssl
+[submodule "submodule/openssl"]
+	path = submodule/openssl
 	url = https://github.com/openssl/openssl
-[submodule "submodule\\blake2"]
-	path = submodule\\blake2
+[submodule "submodule/blake2"]
+	path = submodule/blake2
 	url = https://github.com/BLAKE2/BLAKE2
