@@ -1,0 +1,3 @@
+[submodule "submodule\\crc32c"]
+	path = submodule\\crc32c
+	url = https://github.com/google/crc32c
