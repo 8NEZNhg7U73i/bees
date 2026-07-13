@@ -7,3 +7,6 @@
 [submodule "submodule\\openssl"]
 	path = submodule\\openssl
 	url = https://github.com/openssl/openssl
+[submodule "submodule\\blake2"]
+	path = submodule\\blake2
+	url = https://github.com/BLAKE2/BLAKE2
