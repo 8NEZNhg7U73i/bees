@@ -921,8 +921,48 @@ BeesBlockData::hash() const
 	if (!m_hash_done) {
 		// We can only dedupe unaligned EOF blocks against other unaligned EOF blocks,
 		// so we do NOT round up to a full sum block size.
-		const Blob &blob = data();
-		m_hash = BeesHash(blob.data(), blob.size());
+		bool have_btrfs_csum = false;
+
+		/* bees stores 4K hashes.  Use the Btrfs CSUM tree only when the
+		 * filesystem sectorsize is also 4K, so each bees block corresponds
+		 * exactly to one Btrfs checksum. */
+		try {
+			const BeesAddress block_addr = addr();
+			const BeesAddress::Type physical = block_addr.get_physical_or_zero();
+			if (physical != 0) {
+				BtrfsCsumTreeFetcher ctf(fd());
+				if (ctf.block_size() == BLOCK_SIZE_SUMS) {
+					uint64_t csum_logical = physical;
+					if (block_addr.is_compressed()) {
+						if (block_addr.has_compressed_offset()) {
+							csum_logical += block_addr.get_compressed_offset();
+						} else {
+							csum_logical = 0;
+						}
+					}
+
+					if (csum_logical != 0 &&
+					    (csum_logical & BLOCK_MASK_SUMS) == 0) {
+						ctf.get_sums(csum_logical, 1,
+							[&](uint64_t logical, const uint8_t *buf, size_t count) {
+								if (logical == csum_logical && count == ctf.sum_size()) {
+									m_hash = BeesHash::from_btrfs_csum(buf, count);
+									have_btrfs_csum = true;
+								}
+							});
+					}
+				}
+			}
+		}
+		catch (const exception &e) {
+			BEESLOGDEBUG("Btrfs csum lookup failed for " << *this
+				<< ": " << e.what() << " (using CRC64)");
+		}
+
+		if (!have_btrfs_csum) {
+			const Blob &blob = data();
+			m_hash = BeesHash(blob.data(), blob.size());
+		}
 		m_hash_done = true;
 		BEESCOUNT(block_hash);
 	}
