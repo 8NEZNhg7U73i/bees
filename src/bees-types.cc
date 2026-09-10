@@ -918,7 +918,8 @@ BeesBlockData::data() const
 BeesHash
 BeesBlockData::hash() const
 {
-	if (!m_hash_done) {
+	if (!m_hash_done)
+	{
 		// We can only dedupe unaligned EOF blocks against other unaligned EOF blocks,
 		// so we do NOT round up to a full sum block size.
 		bool have_btrfs_csum = false;
@@ -926,37 +927,48 @@ BeesBlockData::hash() const
 		/* bees stores 4K hashes.  Use the Btrfs CSUM tree only when the
 		 * filesystem sectorsize is also 4K, so each bees block corresponds
 		 * exactly to one Btrfs checksum. */
-		try {
+		try
+		{
 			const BeesAddress block_addr = addr();
 			const BeesAddress::Type physical = block_addr.get_physical_or_zero();
-			if (physical != 0) {
+			if (physical != 0)
+			{
 				BtrfsCsumTreeFetcher ctf(fd());
-				if (ctf.block_size() == BLOCK_SIZE_SUMS) {
+				if (ctf.block_size() == BLOCK_SIZE_SUMS)
+				{
 					uint64_t csum_logical = physical;
-					if (block_addr.is_compressed()) {
-						if (block_addr.has_compressed_offset()) {
+					if (block_addr.is_compressed())
+					{
+						if (block_addr.has_compressed_offset())
+						{
 							csum_logical += block_addr.get_compressed_offset();
-						} else {
+						}
+						else
+						{
 							csum_logical = 0;
 						}
 					}
 
 					if (csum_logical != 0 &&
-					    (csum_logical & BLOCK_MASK_SUMS) == 0) {
+							(csum_logical & BLOCK_MASK_SUMS) == 0)
+					{
 						ctf.get_sums(csum_logical, 1,
-							[&](uint64_t logical, const uint8_t *buf, size_t count) {
-								if (logical == csum_logical && count == ctf.sum_size()) {
-									m_hash = BeesHash::from_btrfs_csum(buf, count);
-									have_btrfs_csum = true;
-								}
-							});
+												 [&](uint64_t logical, const uint8_t *buf, size_t count)
+												 {
+													 if (logical == csum_logical && count == ctf.sum_size())
+													 {
+														 m_hash = BeesHash::from_btrfs_csum(buf, count);
+														 have_btrfs_csum = true;
+													 }
+												 });
 					}
 				}
 			}
 		}
-		catch (const exception &e) {
+		catch (const exception &e)
+		{
 			BEESLOGDEBUG("Btrfs csum lookup failed for " << *this
-				<< ": " << e.what() << " (using CRC64)");
+																									 << ": " << e.what() << " (using CRC64)");
 		}
 
 		if (!have_btrfs_csum) {
