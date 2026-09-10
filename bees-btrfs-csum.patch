@@ -1,169 +1,97 @@
 diff --git a/src/bees.h b/src/bees.h
-index 0000000..0000000 100644
 --- a/src/bees.h
 +++ b/src/bees.h
-@@ -1,6 +1,6 @@
- #ifndef BEES_H
- #define BEES_H
-+
- #include "crucible/btrfs-tree.h"
- #include "crucible/cache.h"
- #include "crucible/chatter.h"
-@@ -? ,? +?,? @@ struct BeesHash {
- 	using Type = uint64_t;
-
- 	BeesHash() : m_hash(0) { }
- 	BeesHash(Type that) : m_hash(that) { }
-+	// Hash raw data with the historical bees CRC64 implementation.
+@@ -586,6 +586,8 @@
  	operator Type() const { return m_hash; }
  	BeesHash& operator=(const Type that) { m_hash = that; return *this; }
  	BeesHash(const uint8_t *ptr, size_t len);
-+
-+	// Convert the native Btrfs checksum bytes to bees' 64-bit table key.
-+	//
-+	// Btrfs supports checksum sizes of 4, 8, and 32 bytes.  The on-disk
-+	// checksum itself remains the source value; bees' persistent hash table
-+	// is intentionally kept at 64 bits, so larger checksums are truncated
-+	// to the first eight bytes.  This is a prefilter only: data equality is
-+	// still verified before extent-same.
++	// Convert a native Btrfs checksum to bees' 64-bit hash-table key.
 +	static BeesHash from_btrfs_csum(const uint8_t *ptr, size_t len);
-
  private:
- 	Type m_hash;
- };
+ 	Type	m_hash;
+ 
 diff --git a/src/bees-hash.cc b/src/bees-hash.cc
-index 0000000..0000000 100644
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
-@@ -10,11 +10,32 @@ using namespace crucible;
- using namespace std;
-
- BeesHash::BeesHash(const uint8_t *ptr, size_t len) :
- 	// m_hash(CityHash64(reinterpret_cast<const char *>(ptr), len))
- 	m_hash(Digest::CRC::crc64(ptr, len))
+@@ -13,5 +13,27 @@
  {
  }
-
+ 
 +BeesHash
 +BeesHash::from_btrfs_csum(const uint8_t *ptr, size_t len)
 +{
-+	THROW_CHECK1(invalid_argument, ptr, ptr != nullptr || len == 0);
++	THROW_CHECK1(invalid_argument, ptr, ptr != nullptr);
 +	THROW_CHECK1(invalid_argument, len, len > 0);
++	THROW_CHECK1(invalid_argument, len, len <= 32);
 +
-+	// The bees hash table stores one uint64_t per entry.  Btrfs CRC32C and
-+	// XXHASH64 are little-endian on disk; SHA256/BLAKE2B are byte strings.
-+	// Reading the first eight bytes as a little-endian integer gives us a
-+	// stable 64-bit key for all currently supported Btrfs checksum sizes.
-+	const size_t n = min(len, sizeof(Type));
++	// The persistent bees hash-table key is 64 bits.  For Btrfs checksum
++	// types larger than 8 bytes, retain the first 8 checksum bytes.
++	const size_t copy_len = min(len, sizeof(Type));
 +	Type value = 0;
-+	for (size_t i = 0; i < n; ++i) {
-+		value |= Type(ptr[i]) << (8 * i);
++	memcpy(&value, ptr, copy_len);
++#if __BYTE_ORDER == __BIG_ENDIAN
++	if (copy_len == sizeof(uint32_t)) {
++		value = be32toh(static_cast<uint32_t>(value));
++	} else if (copy_len == sizeof(uint64_t)) {
++		value = be64toh(value);
 +	}
++#endif
 +	return BeesHash(value);
 +}
 +
  ostream &
  operator<<(ostream &os, const BeesHash &bh)
- {
- 	return os << to_hex(BeesHash::Type(bh));
- }
 diff --git a/src/bees-types.cc b/src/bees-types.cc
-index 0000000..0000000 100644
 --- a/src/bees-types.cc
 +++ b/src/bees-types.cc
-@@ -852,15 +852,67 @@ BeesBlockData::data() const
- BeesHash
- BeesBlockData::hash() const
- {
+@@ -855,8 +855,48 @@
  	if (!m_hash_done) {
--		// We can only dedupe unaligned EOF blocks against other unaligned EOF blocks,
--		// so we do NOT round up to a full sum block size.
+ 		// We can only dedupe unaligned EOF blocks against other unaligned EOF blocks,
+ 		// so we do NOT round up to a full sum block size.
 -		const Blob &blob = data();
 -		m_hash = BeesHash(blob.data(), blob.size());
-+		/*
-+		 * Prefer the checksum already maintained by Btrfs.
-+		 *
-+		 * BtrfsCsumTreeFetcher is already part of bees' crucible layer.  It
-+		 * reads the current CSUM_TREE item and discovers the checksum type
-+		 * and checksum width from BTRFS_IOC_FS_INFO, so bees does not need
-+		 * to duplicate CRC32C/XXHASH64/SHA256/BLAKE2B implementations.
-+		 *
-+		 * The persistent bees table is still 64-bit, therefore
-+		 * BeesHash::from_btrfs_csum() projects the native csum to 64 bits.
-+		 *
-+		 * For a compressed extent, BeesAddress encodes the beginning of the
-+		 * physical/logical extent plus the file-data offset inside it.  Add
-+		 * that offset before looking up the CSUM_TREE entry.
-+		 *
-+		 * Native Btrfs checksums are sector-sized.  bees currently hashes
-+		 * 4096-byte units, so for larger Btrfs sectors we only use the
-+		 * native csum when the requested block is at a sector boundary.
-+		 * Other cases use the old CRC64 fallback rather than failing the
-+		 * live scan.
-+		 */
 +		bool have_btrfs_csum = false;
-+		const BeesAddress block_addr = addr();
-+		const BeesAddress::Type physical = block_addr.get_physical_or_zero();
 +
-+		if (physical != 0) {
-+			try {
++		/* bees stores 4K hashes.  Use the Btrfs CSUM tree only when the
++		 * filesystem sectorsize is also 4K, so each bees block corresponds
++		 * exactly to one Btrfs checksum. */
++		try {
++			const BeesAddress block_addr = addr();
++			const BeesAddress::Type physical = block_addr.get_physical_or_zero();
++			if (physical != 0) {
 +				BtrfsCsumTreeFetcher ctf(fd());
-+				const uint64_t sector_size = ctf.block_size();
-+				uint64_t csum_logical = physical;
++				if (ctf.block_size() == BLOCK_SIZE_SUMS) {
++					uint64_t csum_logical = physical;
++					if (block_addr.is_compressed()) {
++						if (block_addr.has_compressed_offset()) {
++							csum_logical += block_addr.get_compressed_offset();
++						} else {
++							csum_logical = 0;
++						}
++					}
 +
-+				if (block_addr.is_compressed()) {
-+					if (block_addr.has_compressed_offset()) {
-+						csum_logical += block_addr.get_compressed_offset();
-+					} else {
-+						csum_logical = 0;
++					if (csum_logical != 0 &&
++					    (csum_logical & BLOCK_MASK_SUMS) == 0) {
++						ctf.get_sums(csum_logical, 1,
++							[&](uint64_t logical, const uint8_t *buf, size_t count) {
++								if (logical == csum_logical && count == ctf.sum_size()) {
++									m_hash = BeesHash::from_btrfs_csum(buf, count);
++									have_btrfs_csum = true;
++								}
++							});
 +					}
 +				}
-+
-+				if (csum_logical != 0 &&
-+				    (csum_logical % sector_size) == 0 &&
-+				    size() > 0) {
-+					ctf.get_sums(csum_logical, 1,
-+						[&](uint64_t logical, const uint8_t *buf, size_t count) {
-+							if (logical != csum_logical) {
-+								return;
-+							}
-+							if (count != ctf.sum_size()) {
-+								return;
-+							}
-+							m_hash = BeesHash::from_btrfs_csum(buf, count);
-+							have_btrfs_csum = true;
-+						});
-+				}
-+			} catch (const std::exception &e) {
-+				BEESLOGDEBUG("Btrfs csum lookup failed for " << *this
-+					<< ": " << e.what() << " (using CRC64 fallback)");
 +			}
 +		}
-+
-+		if (have_btrfs_csum) {
-+			BEESCOUNT(block_hash_btrfs_csum);
-+		} else {
-+			// No CSUM_TREE entry (e.g. NODATASUM), unsupported sector
-+			// alignment, an inline/unmapped block, or an older kernel.
-+			// Do not round up an unaligned EOF block.
-+			const Blob &blob = data();
-+			m_hash = BeesHash(blob.data(), blob.size());
-+			BEESCOUNT(block_hash_crc64_fallback);
++		catch (const exception &e) {
++			BEESLOGDEBUG("Btrfs csum lookup failed for " << *this
++				<< ": " << e.what() << " (using CRC64)");
 +		}
 +
++		if (!have_btrfs_csum) {
++			const Blob &blob = data();
++			m_hash = BeesHash(blob.data(), blob.size());
++		}
  		m_hash_done = true;
  		BEESCOUNT(block_hash);
  	}
-
- 	return m_hash;
- }
-diff --git a/docs/config.md b/docs/config.md
-index 0000000..0000000 100644
---- a/docs/config.md
-+++ b/docs/config.md
-@@ -1,3 +1,3 @@
-+NOTE: Native Btrfs checksum hashes and historical CRC64 hashes use the same
-+64-bit hash-table cell format but are not interchangeable.  Delete and
-+recreate `beeshash.dat` when switching an existing bees installation to the
-+native-csum implementation, otherwise old CRC64 entries will remain in the
-+table and reduce hit rate until they are evicted.
