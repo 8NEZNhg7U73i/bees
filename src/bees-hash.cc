@@ -31,9 +31,12 @@ BeesHash::from_btrfs_csum(const uint8_t *ptr, size_t len)
 	Type value = 0;
 	memcpy(&value, ptr, copy_len);
 #if __BYTE_ORDER == __BIG_ENDIAN
-	if (copy_len == sizeof(uint32_t)) {
+	if (copy_len == sizeof(uint32_t))
+	{
 		value = be32toh(static_cast<uint32_t>(value));
-	} else if (copy_len == sizeof(uint64_t)) {
+	}
+	else if (copy_len == sizeof(uint64_t))
+	{
 		value = be64toh(value);
 	}
 #endif
