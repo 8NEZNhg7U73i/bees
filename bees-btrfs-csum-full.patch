@@ -1,0 +1,283 @@
+--- a/src/bees.h
++++ b/src/bees.h
+@@ -1,3 +1,48 @@
+ ostream & operator<<(ostream &os, const BeesAddress &ba);
+ 
++/*
++ * Complete Btrfs data checksum.
++ *
++ * Btrfs checksum values are 4, 8, or 32 bytes.  Keep the complete value;
++ * never reduce SHA256/BLAKE2B to 64 bits.
++ *
++ * bucket_key() is only used for selecting the hash-table bucket.  It is
++ * NOT the stored checksum and is never used for checksum equality.
++ */
++struct BeesHash {
++	static constexpr size_t MAX_SIZE = 32;
++
++	BeesHash() : m_size(0), m_hash{} {}
++	BeesHash(const uint8_t *ptr, size_t len) : m_size(len), m_hash{} {
++		THROW_CHECK1(invalid_argument, len, len <= MAX_SIZE);
++		THROW_CHECK1(invalid_argument, ptr, ptr != nullptr || len == 0);
++		if (len) {
++			memcpy(m_hash.data(), ptr, len);
++		}
++	}
++
++	bool empty() const { return m_size == 0; }
++	size_t size() const { return m_size; }
++	const uint8_t *data() const { return m_hash.data(); }
++
++	uint64_t bucket_key() const;
++
++	bool operator==(const BeesHash &that) const {
++		return m_size == that.m_size && m_hash == that.m_hash;
++	}
++	bool operator!=(const BeesHash &that) const {
++		return !(*this == that);
++	}
++	bool operator<(const BeesHash &that) const {
++		if (m_size != that.m_size) return m_size < that.m_size;
++		return m_hash < that.m_hash;
++	}
++
++private:
++	uint8_t m_size;
++	array<uint8_t, MAX_SIZE> m_hash;
++};
++
++ostream & operator<<(ostream &os, const BeesHash &hash);
++
+ class BeesStringFile {
+--- a/src/bees.h
++++ b/src/bees.h
+@@ -1,4 +1,4 @@
+ class BeesHashTable {
+ 	shared_ptr<BeesContext>	m_ctx;
+ public:
+-	using HashType = uint64_t;
++	using HashType = BeesHash;
+--- a/src/bees.h
++++ b/src/bees.h
+@@ -1,4 +1,4 @@
+-	vector<Cell>	find_cell(HashType hash);
+-	bool		push_random_hash_addr(HashType hash, AddrType addr);
+-	void		erase_hash_addr(HashType hash, AddrType addr);
+-	void		push_front_hash_addr(HashType hash, AddrType addr);
++	vector<Cell>	find_cell(const HashType &hash);
++	bool		push_random_hash_addr(const HashType &hash, AddrType addr);
++	void		erase_hash_addr(const HashType &hash, AddrType addr);
++	bool		push_front_hash_addr(const HashType &hash, AddrType addr);
+--- a/src/bees.h
++++ b/src/bees.h
+@@ -1,22 +0,0 @@
+-struct BeesHash {
+-
+-	using Type = uint64_t;
+-
+-	BeesHash() : m_hash(0) { }
+-
+-	BeesHash(Type that) : m_hash(that) { }
+-
+-	operator Type() const { return m_hash; }
+-
+-	BeesHash& operator=(const Type that) { m_hash = that; return *this; }
+-
+-	BeesHash(const uint8_t *ptr, size_t len);
+-
+-private:
+-
+-	Type m_hash;
+-
+-};
+-
+-ostream & operator<<(ostream &os, const BeesHash &bh);
+-
+--- a/src/bees.h
++++ b/src/bees.h
+@@ -1 +1,2 @@
+ #include <functional>
++#include <array>
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1,3 +1,2 @@
+ #include "crucible/city.h"
+-#include "crucible/crc64.h"
+ #include "crucible/string.h"
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1,11 +1,17 @@
+-BeesHash::BeesHash(const uint8_t *ptr, size_t len) :
+-	// m_hash(CityHash64(reinterpret_cast<const char *>(ptr), len))
+-	m_hash(Digest::CRC::crc64(ptr, len))
++uint64_t
++BeesHash::bucket_key() const
+ {
++	return CityHash64(reinterpret_cast<const char *>(m_hash.data()), m_size);
+ }
+ 
+ ostream &
+ operator<<(ostream &os, const BeesHash &bh)
+ {
+-	return os << to_hex(BeesHash::Type(bh));
++	static const char hex[] = "0123456789abcdef";
++	os << "0x";
++	for (size_t i = 0; i < bh.size(); ++i) {
++		const uint8_t c = bh.data()[i];
++		os << hex[c >> 4] << hex[c & 0x0f];
++	}
++	return os;
+ }
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-Bucket *pp = &m_bucket_ptr[hash % m_buckets];
++Bucket *pp = &m_bucket_ptr[hash.bucket_key() % m_buckets];
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-Extent *iop = &m_extent_ptr[ (hash % m_buckets) / c_buckets_per_extent ];
++Extent *iop = &m_extent_ptr[ (hash.bucket_key() % m_buckets) / c_buckets_per_extent ];
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-cell->e_hash = 0;
++cell->e_hash = BeesHash();
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-*ip = Cell(0, 0);
++*ip = Cell(HashType(), 0);
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-ip = find(er.first, er.second, Cell(0, 0));
++ip = find(er.first, er.second, Cell(HashType(), 0));
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-if (*ip == Cell(0, 0)) {
++if (*ip == Cell(HashType(), 0)) {
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-BEESLOGDEBUG("Bad hash table address hash " << to_hex(cell->e_hash) << " addr " << to_hex(cell->e_addr));
++BEESLOGDEBUG("Bad hash table address hash " << cell->e_hash << " addr " << to_hex(cell->e_addr));
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-BEESTOOLONG("find_cell hash " << BeesHash(hash));
++BEESTOOLONG("find_cell hash " << hash);
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-BEESTOOLONG("erase hash " << to_hex(hash) << " addr " << addr);
++BEESTOOLONG("erase hash " << hash << " addr " << addr);
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-BEESTOOLONG("push_front_hash_addr hash " << BeesHash(hash) <<" addr " << BeesAddress(addr));
++BEESTOOLONG("push_front_hash_addr hash " << hash <<" addr " << BeesAddress(addr));
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-BEESTOOLONG("push_random_hash_addr hash " << BeesHash(hash) << " addr " << BeesAddress(addr));
++BEESTOOLONG("push_random_hash_addr hash " << hash << " addr " << BeesAddress(addr));
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-BeesHashTable::find_cell(HashType hash)
++BeesHashTable::find_cell(const HashType &hash)
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-BeesHashTable::erase_hash_addr(HashType hash, AddrType addr)
++BeesHashTable::erase_hash_addr(const HashType &hash, AddrType addr)
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-BeesHashTable::push_front_hash_addr(HashType hash, AddrType addr)
++BeesHashTable::push_front_hash_addr(const HashType &hash, AddrType addr)
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -1 +1 @@
+-BeesHashTable::push_random_hash_addr(HashType hash, AddrType addr)
++BeesHashTable::push_random_hash_addr(const HashType &hash, AddrType addr)
+--- a/src/bees-types.cc
++++ b/src/bees-types.cc
+@@ -2,10 +2,32 @@
+ BeesBlockData::hash() const
+ {
+ 	if (!m_hash_done) {
+-		// We can only dedupe unaligned EOF blocks against other unaligned EOF blocks,
+-		// so we do NOT round up to a full sum block size.
+-		const Blob &blob = data();
+-		m_hash = BeesHash(blob.data(), blob.size());
++		/*
++		 * Use the checksum already maintained by Btrfs.
++		 *
++		 * The checksum value is copied in full into BeesHash.  There is no
++		 * CRC64 fallback and no truncation of SHA256/BLAKE2B.
++		 *
++		 * Btrfs compressed extents are deliberately excluded here: their
++		 * on-disk compressed byte range is not a one-to-one mapping to the
++		 * 4K uncompressed blocks used by bees.  Do not manufacture a hash
++		 * from the wrong checksum range.
++		 */
++		const BeesAddress block_addr = addr();
++		if (!block_addr.is_magic() && !block_addr.is_compressed()) {
++			const uint64_t logical = block_addr.get_physical_or_zero();
++			if (logical && !(logical & BLOCK_MASK_SUMS)) {
++				BtrfsCsumTreeFetcher ctf(fd());
++				if (ctf.block_size() == BLOCK_SIZE_SUMS) {
++					ctf.get_sums(logical, 1,
++						[&](uint64_t sum_logical, const uint8_t *buf, size_t bytes) {
++							if (sum_logical == logical && bytes == ctf.sum_size()) {
++								m_hash = BeesHash(buf, bytes);
++							}
++						});
++				}
++			}
++		}
+ 		m_hash_done = true;
+ 		BEESCOUNT(block_hash);
+ 	}
+--- a/src/bees-context.cc
++++ b/src/bees-context.cc
+@@ -1,3 +1,7 @@
+ 		const BeesHash hash = bbd.hash();
++		if (hash.empty()) {
++			BEESCOUNT(scan_no_btrfs_csum);
++			continue;
++		}
+ 		// Weed out zero blocks
+ 		BEESNOTE("is_data_zero " << bbd);
+--- a/src/bees-context.cc
++++ b/src/bees-context.cc
+@@ -1,4 +1,9 @@
+ 		if (!addr.is_magic() && !bbd.is_data_zero()) {
+-			hash_table->push_random_hash_addr(bbd.hash(), bbd.addr());
+-			BEESCOUNT(scan_reinsert);
++			const BeesHash hash = bbd.hash();
++			if (!hash.empty()) {
++				hash_table->push_random_hash_addr(hash, bbd.addr());
++				BEESCOUNT(scan_reinsert);
++			} else {
++				BEESCOUNT(scan_no_btrfs_csum);
++			}
+ 		}
+--- a/src/bees-context.cc
++++ b/src/bees-context.cc
+@@ -1 +1 @@
+-m_hash_table = make_shared<BeesHashTable>(shared_from_this(), "beeshash.dat");
++m_hash_table = make_shared<BeesHashTable>(shared_from_this(), "beeshash-csum.dat");
+--- a/scripts/beesd.in
++++ b/scripts/beesd.in
+@@ -1 +1 @@
+-DB_PATH="$BEESHOME/beeshash.dat"
++DB_PATH="$BEESHOME/beeshash-csum.dat"
+--- a/docs/running.md
++++ b/docs/running.md
+@@ -1 +1 @@
+-    `    beeshash.dat | persistent hash table. Binary data.
++    `    beeshash-csum.dat | persistent Btrfs checksum table. Binary data.
