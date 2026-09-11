@@ -1,6 +1,7 @@
+diff --git a/src/bees.h b/src/bees.h
 --- a/src/bees.h
 +++ b/src/bees.h
-@@ -1,3 +1,48 @@
+@@ -381,3 +381,48 @@
  ostream & operator<<(ostream &os, const BeesAddress &ba);
  
 +/*
@@ -49,17 +50,19 @@
 +ostream & operator<<(ostream &os, const BeesHash &hash);
 +
  class BeesStringFile {
+diff --git a/src/bees.h b/src/bees.h
 --- a/src/bees.h
 +++ b/src/bees.h
-@@ -1,4 +1,4 @@
+@@ -396,4 +396,4 @@
  class BeesHashTable {
  	shared_ptr<BeesContext>	m_ctx;
  public:
 -	using HashType = uint64_t;
 +	using HashType = BeesHash;
+diff --git a/src/bees.h b/src/bees.h
 --- a/src/bees.h
 +++ b/src/bees.h
-@@ -1,4 +1,4 @@
+@@ -434,4 +434,4 @@
 -	vector<Cell>	find_cell(HashType hash);
 -	bool		push_random_hash_addr(HashType hash, AddrType addr);
 -	void		erase_hash_addr(HashType hash, AddrType addr);
@@ -68,9 +71,10 @@
 +	bool		push_random_hash_addr(const HashType &hash, AddrType addr);
 +	void		erase_hash_addr(const HashType &hash, AddrType addr);
 +	bool		push_front_hash_addr(const HashType &hash, AddrType addr);
+diff --git a/src/bees.h b/src/bees.h
 --- a/src/bees.h
 +++ b/src/bees.h
-@@ -1,22 +0,0 @@
+@@ -637,22 +0,0 @@
 -struct BeesHash {
 -
 -	using Type = uint64_t;
@@ -93,20 +97,23 @@
 -
 -ostream & operator<<(ostream &os, const BeesHash &bh);
 -
+diff --git a/src/bees.h b/src/bees.h
 --- a/src/bees.h
 +++ b/src/bees.h
-@@ -1 +1,2 @@
+@@ -10,1 +10,2 @@
  #include <functional>
 +#include <array>
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
-@@ -1,3 +1,2 @@
+@@ -3,3 +3,2 @@
  #include "crucible/city.h"
 -#include "crucible/crc64.h"
  #include "crucible/string.h"
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
-@@ -1,11 +1,17 @@
+@@ -15,11 +12,17 @@
 -BeesHash::BeesHash(const uint8_t *ptr, size_t len) :
 -	// m_hash(CityHash64(reinterpret_cast<const char *>(ptr), len))
 -	m_hash(Digest::CRC::crc64(ptr, len))
@@ -128,81 +135,97 @@
 +	}
 +	return os;
  }
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
-@@ -1 +1 @@
+@@ -82,1 +82,1 @@
 -Bucket *pp = &m_bucket_ptr[hash % m_buckets];
 +Bucket *pp = &m_bucket_ptr[hash.bucket_key() % m_buckets];
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
-@@ -1 +1 @@
+@@ -95,1 +95,1 @@
 -Extent *iop = &m_extent_ptr[ (hash % m_buckets) / c_buckets_per_extent ];
 +Extent *iop = &m_extent_ptr[ (hash.bucket_key() % m_buckets) / c_buckets_per_extent ];
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
 @@ -1 +1 @@
 -cell->e_hash = 0;
 +cell->e_hash = BeesHash();
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
-@@ -1 +1 @@
+@@ -522,1 +522,1 @@
 -*ip = Cell(0, 0);
 +*ip = Cell(HashType(), 0);
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
-@@ -1 +1 @@
+@@ -554,1 +554,1 @@
 -ip = find(er.first, er.second, Cell(0, 0));
 +ip = find(er.first, er.second, Cell(HashType(), 0));
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
 @@ -1 +1 @@
 -if (*ip == Cell(0, 0)) {
 +if (*ip == Cell(HashType(), 0)) {
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
 @@ -1 +1 @@
 -BEESLOGDEBUG("Bad hash table address hash " << to_hex(cell->e_hash) << " addr " << to_hex(cell->e_addr));
 +BEESLOGDEBUG("Bad hash table address hash " << cell->e_hash << " addr " << to_hex(cell->e_addr));
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
 @@ -1 +1 @@
 -BEESTOOLONG("find_cell hash " << BeesHash(hash));
 +BEESTOOLONG("find_cell hash " << hash);
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
 @@ -1 +1 @@
 -BEESTOOLONG("erase hash " << to_hex(hash) << " addr " << addr);
 +BEESTOOLONG("erase hash " << hash << " addr " << addr);
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
 @@ -1 +1 @@
 -BEESTOOLONG("push_front_hash_addr hash " << BeesHash(hash) <<" addr " << BeesAddress(addr));
 +BEESTOOLONG("push_front_hash_addr hash " << hash <<" addr " << BeesAddress(addr));
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
 @@ -1 +1 @@
 -BEESTOOLONG("push_random_hash_addr hash " << BeesHash(hash) << " addr " << BeesAddress(addr));
 +BEESTOOLONG("push_random_hash_addr hash " << hash << " addr " << BeesAddress(addr));
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
 @@ -1 +1 @@
 -BeesHashTable::find_cell(HashType hash)
 +BeesHashTable::find_cell(const HashType &hash)
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
 @@ -1 +1 @@
 -BeesHashTable::erase_hash_addr(HashType hash, AddrType addr)
 +BeesHashTable::erase_hash_addr(const HashType &hash, AddrType addr)
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
 @@ -1 +1 @@
 -BeesHashTable::push_front_hash_addr(HashType hash, AddrType addr)
 +BeesHashTable::push_front_hash_addr(const HashType &hash, AddrType addr)
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
 --- a/src/bees-hash.cc
 +++ b/src/bees-hash.cc
 @@ -1 +1 @@
 -BeesHashTable::push_random_hash_addr(HashType hash, AddrType addr)
 +BeesHashTable::push_random_hash_addr(const HashType &hash, AddrType addr)
+diff --git a/src/bees-types.cc b/src/bees-types.cc
 --- a/src/bees-types.cc
 +++ b/src/bees-types.cc
 @@ -2,10 +2,32 @@
@@ -242,6 +265,7 @@
  		m_hash_done = true;
  		BEESCOUNT(block_hash);
  	}
+diff --git a/src/bees-context.cc b/src/bees-context.cc
 --- a/src/bees-context.cc
 +++ b/src/bees-context.cc
 @@ -1,3 +1,7 @@
@@ -252,6 +276,7 @@
 +		}
  		// Weed out zero blocks
  		BEESNOTE("is_data_zero " << bbd);
+diff --git a/src/bees-context.cc b/src/bees-context.cc
 --- a/src/bees-context.cc
 +++ b/src/bees-context.cc
 @@ -1,4 +1,9 @@
@@ -266,16 +291,19 @@
 +				BEESCOUNT(scan_no_btrfs_csum);
 +			}
  		}
+diff --git a/src/bees-context.cc b/src/bees-context.cc
 --- a/src/bees-context.cc
 +++ b/src/bees-context.cc
 @@ -1 +1 @@
 -m_hash_table = make_shared<BeesHashTable>(shared_from_this(), "beeshash.dat");
 +m_hash_table = make_shared<BeesHashTable>(shared_from_this(), "beeshash-csum.dat");
+diff --git a/scripts/beesd.in b/scripts/beesd.in
 --- a/scripts/beesd.in
 +++ b/scripts/beesd.in
 @@ -1 +1 @@
 -DB_PATH="$BEESHOME/beeshash.dat"
 +DB_PATH="$BEESHOME/beeshash-csum.dat"
+diff --git a/docs/running.md.in b/docs/running.md
 --- a/docs/running.md
 +++ b/docs/running.md
 @@ -1 +1 @@
