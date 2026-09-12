@@ -1,11 +1,11 @@
 # Default:
-CCFLAGS = -Wall -Wextra -Werror -O3
+# CCFLAGS = -Wall -Wextra -Werror -O3
 
 # Optimized:
 # CCFLAGS = -Wall -Wextra -Werror -O3 -march=native
 
 # Debug:
-# CCFLAGS = -Wall -Wextra -Werror -O0 -ggdb
+CCFLAGS = -Wall -Wextra -Werror -O0 -ggdb
 
 CCFLAGS += -I../include -D_FILE_OFFSET_BITS=64
 
