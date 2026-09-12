@@ -591,7 +591,7 @@ namespace crucible {
 	void
 	BtrfsCsumTreeFetcher::get_sums(uint64_t const logical, size_t count, function<void(uint64_t logical, const uint8_t *buf, size_t bytes)> output)
 	{
-	#if 0
+	#if 1
 		static bool bctfgs_debug = getenv("BCTFGS_DEBUG");
 	#define BCTFGS_DEBUG(x) do { if (bctfgs_debug) cerr << x; } while (false)
 	#else
