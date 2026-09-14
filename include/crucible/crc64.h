@@ -10,6 +10,9 @@ namespace crucible {
 		namespace CRC {
 			uint64_t crc64(const void *p, size_t len);
 		};
+		namespace XXHASH {
+			uint64_t xxh(const void *p, size_t len);
+		};
 	};
 };
 
