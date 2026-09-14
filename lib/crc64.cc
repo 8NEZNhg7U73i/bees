@@ -101,6 +101,11 @@ namespace crucible {
 		}
 
 		return crc;
+	};
+
+	uint64_t
+	Digest::XXHASH::xxh(const void *p, size_t len)
+	{
 		uint64_t xxhash = XXH64(p, len, 0);
 		return xxhash;
 	}
