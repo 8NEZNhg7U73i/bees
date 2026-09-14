@@ -13,7 +13,7 @@ namespace crucible {
 	uint64_t
 	Digest::CRC::crc64(const void *p, size_t len)
 	{
-    XXH64_hash_t hash64 = XXH64(p, len, 0);
+    uint64_t hash64 = XXH64(p, len, 0);
 		return hash64;
 	}
 
