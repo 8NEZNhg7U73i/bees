@@ -29,6 +29,7 @@
 #include "crucible/crc64.h"
 
 #define POLY64REV 0xd800000000000000ULL
+#include <xxhash.h>
 
 namespace crucible {
 
@@ -100,6 +101,8 @@ namespace crucible {
 		}
 
 		return crc;
+		uint64_t xxhash = XXH64(p, len, 0);
+		return xxhash;
 	}
 
 
