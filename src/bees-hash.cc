@@ -15,6 +15,7 @@ using namespace std;
 BeesHash::BeesHash(const uint8_t *ptr, size_t len) :
 	// m_hash(CityHash64(reinterpret_cast<const char *>(ptr), len))
 	m_hash(Digest::CRC::crc64(ptr, len))
+	m_hash(Digest::XXHASH::xxh(ptr, len))
 {
 }
 
