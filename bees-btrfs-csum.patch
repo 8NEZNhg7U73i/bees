@@ -1,0 +1,97 @@
+diff --git a/src/bees.h b/src/bees.h
+--- a/src/bees.h
++++ b/src/bees.h
+@@ -586,6 +586,8 @@
+ 	operator Type() const { return m_hash; }
+ 	BeesHash& operator=(const Type that) { m_hash = that; return *this; }
+ 	BeesHash(const uint8_t *ptr, size_t len);
++	// Convert a native Btrfs checksum to bees' 64-bit hash-table key.
++	static BeesHash from_btrfs_csum(const uint8_t *ptr, size_t len);
+ private:
+ 	Type	m_hash;
+ 
+diff --git a/src/bees-hash.cc b/src/bees-hash.cc
+--- a/src/bees-hash.cc
++++ b/src/bees-hash.cc
+@@ -13,5 +13,27 @@
+ {
+ }
+ 
++BeesHash
++BeesHash::from_btrfs_csum(const uint8_t *ptr, size_t len)
++{
++	THROW_CHECK1(invalid_argument, ptr, ptr != nullptr);
++	THROW_CHECK1(invalid_argument, len, len > 0);
++	THROW_CHECK1(invalid_argument, len, len <= 32);
++
++	// The persistent bees hash-table key is 64 bits.  For Btrfs checksum
++	// types larger than 8 bytes, retain the first 8 checksum bytes.
++	const size_t copy_len = min(len, sizeof(Type));
++	Type value = 0;
++	memcpy(&value, ptr, copy_len);
++#if __BYTE_ORDER == __BIG_ENDIAN
++	if (copy_len == sizeof(uint32_t)) {
++		value = be32toh(static_cast<uint32_t>(value));
++	} else if (copy_len == sizeof(uint64_t)) {
++		value = be64toh(value);
++	}
++#endif
++	return BeesHash(value);
++}
++
+ ostream &
+ operator<<(ostream &os, const BeesHash &bh)
+diff --git a/src/bees-types.cc b/src/bees-types.cc
+--- a/src/bees-types.cc
++++ b/src/bees-types.cc
+@@ -855,8 +855,48 @@
+ 	if (!m_hash_done) {
+ 		// We can only dedupe unaligned EOF blocks against other unaligned EOF blocks,
+ 		// so we do NOT round up to a full sum block size.
+-		const Blob &blob = data();
+-		m_hash = BeesHash(blob.data(), blob.size());
++		bool have_btrfs_csum = false;
++
++		/* bees stores 4K hashes.  Use the Btrfs CSUM tree only when the
++		 * filesystem sectorsize is also 4K, so each bees block corresponds
++		 * exactly to one Btrfs checksum. */
++		try {
++			const BeesAddress block_addr = addr();
++			const BeesAddress::Type physical = block_addr.get_physical_or_zero();
++			if (physical != 0) {
++				BtrfsCsumTreeFetcher ctf(fd());
++				if (ctf.block_size() == BLOCK_SIZE_SUMS) {
++					uint64_t csum_logical = physical;
++					if (block_addr.is_compressed()) {
++						if (block_addr.has_compressed_offset()) {
++							csum_logical += block_addr.get_compressed_offset();
++						} else {
++							csum_logical = 0;
++						}
++					}
++
++					if (csum_logical != 0 &&
++					    (csum_logical & BLOCK_MASK_SUMS) == 0) {
++						ctf.get_sums(csum_logical, 1,
++							[&](uint64_t logical, const uint8_t *buf, size_t count) {
++								if (logical == csum_logical && count == ctf.sum_size()) {
++									m_hash = BeesHash::from_btrfs_csum(buf, count);
++									have_btrfs_csum = true;
++								}
++							});
++					}
++				}
++			}
++		}
++		catch (const exception &e) {
++			BEESLOGDEBUG("Btrfs csum lookup failed for " << *this
++				<< ": " << e.what() << " (using CRC64)");
++		}
++
++		if (!have_btrfs_csum) {
++			const Blob &blob = data();
++			m_hash = BeesHash(blob.data(), blob.size());
++		}
+ 		m_hash_done = true;
+ 		BEESCOUNT(block_hash);
+ 	}
