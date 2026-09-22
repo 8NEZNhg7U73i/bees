@@ -18,6 +18,31 @@ BeesHash::BeesHash(const uint8_t *ptr, size_t len) :
 {
 }
 
+BeesHash
+BeesHash::from_btrfs_csum(const uint8_t *ptr, size_t len)
+{
+	THROW_CHECK1(invalid_argument, ptr, ptr != nullptr);
+	THROW_CHECK1(invalid_argument, len, len > 0);
+	THROW_CHECK1(invalid_argument, len, len <= 32);
+
+	// The persistent bees hash-table key is 64 bits.  For Btrfs checksum
+	// types larger than 8 bytes, retain the first 8 checksum bytes.
+	const size_t copy_len = min(len, sizeof(Type));
+	Type value = 0;
+	memcpy(&value, ptr, copy_len);
+#if __BYTE_ORDER == __BIG_ENDIAN
+	if (copy_len == sizeof(uint32_t))
+	{
+		value = be32toh(static_cast<uint32_t>(value));
+	}
+	else if (copy_len == sizeof(uint64_t))
+	{
+		value = be64toh(value);
+	}
+#endif
+	return BeesHash(value);
+}
+
 ostream &
 operator<<(ostream &os, const BeesHash &bh)
 {
