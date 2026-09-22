@@ -1,5 +1,5 @@
 # Default:
-CCFLAGS = -Wall -Wextra -Werror -O3
+CCFLAGS = -Wall -Wextra -Werror -march=native -O3 -fgraphite-identity -floop-nest-optimize
 
 # Optimized:
 # CCFLAGS = -Wall -Wextra -Werror -O3 -march=native
