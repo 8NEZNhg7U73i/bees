@@ -5,7 +5,7 @@ all: $(BEES)
 include ../makeflags
 -include ../localconf
 
-LIBS = -lcrucible -lpthread -latomic
+LIBS = -lcrucible -lpthread -latomic -lxxhash
 BEES_LDFLAGS = -L../lib $(LDFLAGS)
 
 BEES_OBJS = \
