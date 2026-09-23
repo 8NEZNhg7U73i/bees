@@ -923,20 +923,23 @@ BeesBlockData::hash() const
 		// We can only dedupe unaligned EOF blocks against other unaligned EOF blocks,
 		// so we do NOT round up to a full sum block size.
 		bool have_btrfs_csum = false;
+		BeesAddress block_addr;
+		BeesAddress::Type physical;
+		uint64_t csum_logical;
 
 		/* bees stores 4K hashes.  Use the Btrfs CSUM tree only when the
 		 * filesystem sectorsize is also 4K, so each bees block corresponds
 		 * exactly to one Btrfs checksum. */
 		try
 		{
-			const BeesAddress block_addr = addr();
-			const BeesAddress::Type physical = block_addr.get_physical_or_zero();
+			block_addr = addr();
+			physical = block_addr.get_physical_or_zero();
 			if (physical != 0)
 			{
 				BtrfsCsumTreeFetcher ctf(fd());
 				if (ctf.block_size() == BLOCK_SIZE_SUMS)
 				{
-					uint64_t csum_logical = physical;
+					csum_logical = physical;
 					if (block_addr.is_compressed())
 					{
 						if (block_addr.has_compressed_offset())
@@ -974,6 +977,7 @@ BeesBlockData::hash() const
 		if (!have_btrfs_csum) {
 			const Blob &blob = data();
 			m_hash = BeesHash(blob.data(), blob.size());
+			BEESLOGINFO("Do not have btrfs csum, physical: " << physical << ", " << "logical: " << csum_logical << '\n');
 		}
 		m_hash_done = true;
 		BEESCOUNT(block_hash);
