@@ -1,8 +1,5 @@
 #include "crucible/crc64.h"
-extern "C"
-{
 #include <xxhash.h>
-}
 
 namespace crucible {
 
