@@ -129,14 +129,14 @@ const int FLAGS_CREATE_FILE   = FLAGS_OPEN_COMMON | O_RDWR   | O_CREAT | O_EXCL;
 #define BEESLOG(lv,x)   do { if (lv < bees_log_level) { Chatter __chatter(lv, BeesNote::get_name()); __chatter << x; } } while (0)
 
 extern int bees_trace_level;
-#define BEESTRACE(x)   BEESLOG(LOG_DEBUG, x)
-#define BEESTOOLONG(x) BEESLOG(LOG_DEBUG, x)
-#define BEESNOTE(x)    BEESLOG(LOG_DEBUG, x)
+#define BEESTRACE(x)   BeesTracer  SRSLY_WTF_C(beesTracer_,  __LINE__) ([&]()                 { BEESLOG(bees_trace_level, "TRACE: " << x << " at " << __FILE__ << ":" << __LINE__);   })
+#define BEESTOOLONG(x) BeesTooLong SRSLY_WTF_C(beesTooLong_, __LINE__) ([&](ostream &_btl_os) { _btl_os << x; })
+#define BEESNOTE(x)    BeesNote    SRSLY_WTF_C(beesNote_,    __LINE__) ([&](ostream &_btl_os) { _btl_os << x; })
 
-#define BEESLOGERR(x)    BEESLOG(LOG_DEBUG, x)
-#define BEESLOGWARN(x)   BEESLOG(LOG_DEBUG, x)
-#define BEESLOGNOTICE(x) BEESLOG(LOG_DEBUG, x)
-#define BEESLOGINFO(x)   BEESLOG(LOG_DEBUG, x)
+#define BEESLOGERR(x)    BEESLOG(LOG_ERR, x)
+#define BEESLOGWARN(x)   BEESLOG(LOG_WARNING, x)
+#define BEESLOGNOTICE(x) BEESLOG(LOG_NOTICE, x)
+#define BEESLOGINFO(x)   BEESLOG(LOG_INFO, x)
 #define BEESLOGDEBUG(x)  BEESLOG(LOG_DEBUG, x)
 
 #define BEESLOGONCE(__x) do { \
