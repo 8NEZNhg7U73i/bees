@@ -519,6 +519,8 @@ BeesContext::scan_one_extent(const BeesFileRange &bfr, const Extent &e)
 				// BEESLOGDEBUG("Found matching hash " << hash << " at same address " << addr << ", skipping " << bfr);
 				BEESCOUNT(scan_already);
 				return;
+			} else {
+				BEESLOGINFO("different addr, found_addr: " << found_addr << ", " << "addr: " << addr);
 			}
 
 			// Address is a duplicate.
@@ -558,7 +560,7 @@ BeesContext::scan_one_extent(const BeesFileRange &bfr, const Extent &e)
 			BeesResolver resolved(m_ctx, found_addr);
 			// Toxic extents are really toxic
 			if (resolved.is_toxic()) {
-				BEESLOGDEBUG("WORKAROUND: discovered toxic match at found_addr " << found_addr << " matching bbd " << bbd);
+				BEESLOGINFO("WORKAROUND: discovered toxic match at found_addr " << found_addr << " matching bbd " << bbd);
 				BEESCOUNT(scan_toxic_match);
 				// Make sure we never see this hash again.
 				// It has become toxic since it was inserted into the hash table.
@@ -568,7 +570,7 @@ BeesContext::scan_one_extent(const BeesFileRange &bfr, const Extent &e)
 			} else if (!resolved.count()) {
 				BEESCOUNT(scan_resolve_zero);
 				// Didn't find a block at the table address, address is dead
-				BEESLOGDEBUG("Erasing stale addr " << addr << " hash " << hash);
+				BEESLOGINFO("Address is dead, Erasing stale addr " << addr << " hash " << hash);
 				hash_table->erase_hash_addr(hash, found_addr);
 				continue;
 			} else {
@@ -579,7 +581,7 @@ BeesContext::scan_one_extent(const BeesFileRange &bfr, const Extent &e)
 			bar.at(bar_p) = 'M';
 
 			BEESNOTE("finding one match (out of " << resolved.count() << ") at " << resolved.addr() << " for " << bbd);
-			BEESTRACE("finding one match (out of " << resolved.count() << ") at " << resolved.addr() << " for " << bbd);
+			BEESLOGINFO("contains references, finding one match (out of " << resolved.count() << ") at " << resolved.addr() << " for " << bbd);
 			auto replaced_brp = resolved.replace_dst(bbd);
 			BeesFileRange &replaced_bfr = replaced_brp.second;
 			BEESTRACE("next_p " << to_hex(next_p) << " -> replaced_bfr " << replaced_bfr);
@@ -588,7 +590,7 @@ BeesContext::scan_one_extent(const BeesFileRange &bfr, const Extent &e)
 			if (resolved.found_hash()) {
 				BEESCOUNT(scan_hash_hit);
 			} else {
-				BEESLOGDEBUG("Erasing stale hash " << hash << " addr " << resolved.addr());
+				BEESLOGINFO("Not resolved found_hash, Erasing stale hash " << hash << " addr " << resolved.addr());
 				hash_table->erase_hash_addr(hash, resolved.addr());
 				BEESCOUNT(scan_hash_miss);
 				continue;
@@ -758,7 +760,7 @@ BeesContext::scan_one_extent(const BeesFileRange &bfr, const Extent &e)
 		bytes_copied += i.size();
 	}
 
-	BEESTRACE("bar: " << bar);
+	BEESLOGINFO("bar: " << bar);
 
 	// Don't do nuisance dedupes part 1:  free more blocks than we create
 	THROW_CHECK3(runtime_error, bytes_copied, bytes_zeroed, bytes_deduped, bytes_copied >= bytes_zeroed);
@@ -864,6 +866,8 @@ BeesContext::scan_one_extent(const BeesFileRange &bfr, const Extent &e)
 			<< to_hex(e.begin()) << " [" << bar << "] " << to_hex(e.end())
 			<< ' ' << name_fd(bfr.fd())
 		);
+	} else {
+			BEESLOGINFO("pass, " << bar);
 	}
 
 	// Put this extent into the recently seen list if we didn't rewrite it,
